@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="th">
 <head>
     <meta charset="UTF-8">
@@ -270,7 +270,10 @@
             start(sec) {
                 new (window.AudioContext || window.webkitAudioContext)().resume();
                 document.querySelectorAll('audio').forEach(a => {
-                    if(a.src && !a.src.includes(window.location.host)) a.play().then(()=>a.pause()).catch(e=>{});
+                    // แก้แล้ว: เช็คเสียงที่เป็นเสียงที่เราอัดแน่ๆ
+                    if(a.src && a.src.startsWith('blob:')) {
+                        a.play().then(()=>a.pause()).catch(e=>console.warn("Audio unlock failed", e));
+                    }
                 });
                 displayManager.lock();
                 this.worker.postMessage({ cmd: 'start', dur: sec });
@@ -319,7 +322,8 @@
                     title.innerText = 'วัดสัญญาณชีพ!'; title.className = 'text-4xl font-bold text-rose-500 mb-2 drop-shadow-md'; icon.innerText = '❤️';
                 }
 
-                if (audioEl.src && !audioEl.src.includes(window.location.host)) {
+                // แก้แล้ว: เช็คว่าเป็นลิงก์ที่เกิดจากเสียงที่เราอัดเท่านั้น
+                if (audioEl.src && audioEl.src.startsWith('blob:')) {
                     this.currentAudio = audioEl; this.currentAudio.loop = true;
                     this.currentAudio.play().catch(() => {
                         audioManager.playFallback(); this.intervalAudio = setInterval(audioManager.playFallback, 1500);
