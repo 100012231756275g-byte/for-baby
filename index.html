@@ -24,23 +24,22 @@
 
     <script>
         const trackers = [
-            { id: 'feed', name: 'ให้นมลูก', interval: 2, lastTime: Date.now(), audio: null, status: 'idle' },
-            { id: 'vitals', name: 'วัดสัญญาณชีพ', interval: 4, lastTime: Date.now(), audio: null, status: 'idle' }
+            { id: 'feed', name: 'ให้นมลูก', interval: 2, lastTime: null, startTime: null, audio: null, status: 'idle' },
+            { id: 'vitals', name: 'วัดสัญญาณชีพ', interval: 4, lastTime: null, startTime: null, audio: null, status: 'idle' }
         ];
 
         function updateClock() {
             document.getElementById('current-time').innerText = new Date().toLocaleTimeString('th-TH', { hour12: false });
             
             trackers.forEach(t => {
-                const diff = Math.floor((Date.now() - t.lastTime) / 1000);
-                const h = String(Math.floor(diff / 3600)).padStart(2, '0');
-                const m = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
-                const s = String(diff % 60).padStart(2, '0');
-                document.getElementById(`timer-${t.id}`).innerText = `${h}:${m}:${s}`;
+                if (t.status === 'running') {
+                    const elapsed = Math.floor((Date.now() - t.startTime) / 1000);
+                    const h = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+                    const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+                    const s = String(elapsed % 60).padStart(2, '0');
+                    document.getElementById(`timer-${t.id}`).innerText = `${h}:${m}:${s}`;
 
-                if (diff >= (t.interval * 3600)) {
-                    if (t.status !== 'alerting') {
-                        t.status = 'alerting';
+                    if (elapsed >= (t.interval * 3600)) {
                         playAlarm(t);
                     }
                 }
@@ -53,16 +52,27 @@
                 const a = new Audio(t.audio);
                 a.play().catch(e => console.log("รอการโต้ตอบจากผู้ใช้"));
             }
-            t.lastTime = Date.now();
-            t.status = 'idle';
+            // วนลูปการนับเวลาใหม่
+            t.startTime = Date.now();
         }
 
-        // --- เพิ่มฟังก์ชันเทสเสียง ---
+        function startTimer(id) {
+            const t = trackers.find(x => x.id === id);
+            t.status = 'running';
+            t.startTime = Date.now();
+        }
+
+        function stopTimer(id) {
+            const t = trackers.find(x => x.id === id);
+            t.status = 'idle';
+            document.getElementById(`timer-${t.id}`).innerText = "00:00:00";
+        }
+
         function testAudio(id) {
             const t = trackers.find(x => x.id === id);
             if (t && t.audio) {
                 const a = new Audio(t.audio);
-                a.play().catch(e => alert("เบราว์เซอร์บล็อกการเล่นเสียงอัตโนมัติ (ลองกดบันทึกใหม่แล้วเทสอีกครั้ง)"));
+                a.play().catch(e => alert("เบราว์เซอร์บล็อกการเล่นเสียงอัตโนมัติ"));
             } else {
                 alert("ยังไม่มีเสียงที่บันทึกไว้ครับ");
             }
@@ -78,10 +88,11 @@
                             class="w-16 bg-slate-800 text-center rounded-lg py-1 border border-slate-700">
                     </div>
                     <div id="timer-${t.id}" class="text-3xl font-mono text-emerald-400 mb-4 text-center">00:00:00</div>
-                    <div class="grid grid-cols-3 gap-2">
-                        <button onclick="recordAudio('${t.id}')" id="btn-${t.id}" class="col-span-2 py-2 bg-red-600 rounded-xl text-xs font-bold">อัดเสียงเตือน</button>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="startTimer('${t.id}')" class="py-2 bg-emerald-600 rounded-xl text-xs font-bold">เริ่ม</button>
+                        <button onclick="stopTimer('${t.id}')" class="py-2 bg-rose-600 rounded-xl text-xs font-bold">หยุด</button>
+                        <button onclick="recordAudio('${t.id}')" id="btn-${t.id}" class="py-2 bg-slate-700 rounded-xl text-xs font-bold">อัดเสียง</button>
                         <button onclick="testAudio('${t.id}')" class="py-2 bg-indigo-600 rounded-xl text-xs font-bold">เทส</button>
-                        <button onclick="resetTimer('${t.id}')" class="col-span-3 py-2 bg-slate-700 rounded-xl text-sm font-bold">รีเซ็ตเวลา</button>
                     </div>
                 </div>
             `;
@@ -90,12 +101,6 @@
         function updateInterval(id, val) {
             const t = trackers.find(x => x.id === id);
             t.interval = parseInt(val);
-        }
-
-        function resetTimer(id) {
-            const t = trackers.find(x => x.id === id);
-            t.lastTime = Date.now();
-            t.status = 'idle';
         }
 
         async function recordAudio(id) {
@@ -108,8 +113,8 @@
             recorder.onstop = () => {
                 const t = trackers.find(x => x.id === id);
                 t.audio = URL.createObjectURL(new Blob(chunks));
-                btn.innerText = 'อัดสำเร็จ (เทสได้เลย)';
-                setTimeout(() => btn.innerText = 'อัดเสียงเตือน', 2000);
+                btn.innerText = 'อัดสำเร็จ';
+                setTimeout(() => btn.innerText = 'อัดเสียง', 2000);
             };
 
             recorder.start();
