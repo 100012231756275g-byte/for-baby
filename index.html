@@ -18,15 +18,34 @@
         <div id="current-time" class="clock-font text-4xl font-bold text-indigo-400">00:00:00</div>
     </div>
 
+    <!-- ปุ่มเปิด Modal -->
+    <button onclick="openModal()" class="mb-6 px-6 py-3 bg-indigo-600 rounded-full font-bold shadow-lg shadow-indigo-900/50 hover:bg-indigo-500 transition">
+        + เพิ่มรายการใหม่
+    </button>
+
     <div id="tracker-container" class="w-full max-w-sm space-y-4">
-        <!-- รายการจะถูกสร้างโดยอัตโนมัติที่นี่ -->
+        <!-- รายการจะถูกสร้างโดย JS -->
+    </div>
+
+    <!-- Modal เพิ่มรายการ -->
+    <div id="tracker-modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+        <div class="bg-slate-900 p-6 rounded-3xl w-full max-w-sm border border-slate-700">
+            <h2 class="text-xl font-bold mb-4">เพิ่มรายการใหม่</h2>
+            <input type="text" id="modal-name" placeholder="ชื่อรายการ (เช่น ให้นม)" class="w-full bg-slate-800 p-3 rounded-xl mb-3 border border-slate-700">
+            <input type="number" id="modal-interval" placeholder="ทุกกี่ชั่วโมง" class="w-full bg-slate-800 p-3 rounded-xl mb-4 border border-slate-700">
+            
+            <button id="modal-record-btn" onclick="modalRecord()" class="w-full py-2 bg-red-600 rounded-xl text-sm font-bold mb-4">อัดเสียงเตือน</button>
+            
+            <div class="flex gap-2">
+                <button onclick="closeModal()" class="flex-1 py-2 bg-slate-700 rounded-xl font-bold">ยกเลิก</button>
+                <button onclick="saveTracker()" class="flex-1 py-2 bg-emerald-600 rounded-xl font-bold">บันทึก</button>
+            </div>
+        </div>
     </div>
 
     <script>
-        const trackers = [
-            { id: 'feed', name: 'ให้นมลูก', interval: 2, lastTime: null, startTime: null, audio: null, status: 'idle' },
-            { id: 'vitals', name: 'วัดสัญญาณชีพ', interval: 4, lastTime: null, startTime: null, audio: null, status: 'idle' }
-        ];
+        let trackers = [];
+        let tempAudio = null;
 
         function updateClock() {
             document.getElementById('current-time').innerText = new Date().toLocaleTimeString('th-TH', { hour12: false });
@@ -48,12 +67,65 @@
 
         function playAlarm(t) {
             alert(`ถึงเวลา ${t.name} แล้ว!`);
-            if (t.audio) {
-                const a = new Audio(t.audio);
-                a.play().catch(e => console.log("รอการโต้ตอบจากผู้ใช้"));
-            }
-            // วนลูปการนับเวลาใหม่
+            if (t.audio) new Audio(t.audio).play();
             t.startTime = Date.now();
+        }
+
+        function openModal() { document.getElementById('tracker-modal').classList.remove('hidden'); }
+        function closeModal() { document.getElementById('tracker-modal').classList.add('hidden'); }
+
+        async function modalRecord() {
+            const btn = document.getElementById('modal-record-btn');
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const recorder = new MediaRecorder(stream);
+            let chunks = [];
+            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.onstop = () => {
+                tempAudio = URL.createObjectURL(new Blob(chunks));
+                btn.innerText = 'อัดเสียงสำเร็จ!';
+            };
+            recorder.start();
+            btn.innerText = 'กำลังอัด (5 วิ)...';
+            setTimeout(() => recorder.stop(), 5000);
+        }
+
+        function saveTracker() {
+            const name = document.getElementById('modal-name').value;
+            const interval = document.getElementById('modal-interval').value;
+            if(!name || !interval) return alert("กรุณากรอกข้อมูลให้ครบ");
+
+            const newTracker = {
+                id: 't-' + Date.now(),
+                name: name,
+                interval: parseInt(interval),
+                startTime: null,
+                audio: tempAudio,
+                status: 'idle'
+            };
+            trackers.push(newTracker);
+            renderTrackers();
+            closeModal();
+            tempAudio = null;
+        }
+
+        function renderTrackers() {
+            const container = document.getElementById('tracker-container');
+            container.innerHTML = '';
+            trackers.forEach(t => {
+                container.innerHTML += `
+                    <div class="bg-slate-900 p-5 rounded-3xl border border-slate-800">
+                        <div class="flex justify-between items-center mb-3">
+                            <h2 class="font-bold text-lg">${t.name} (${t.interval} ชม.)</h2>
+                        </div>
+                        <div id="timer-${t.id}" class="text-3xl font-mono text-emerald-400 mb-4 text-center">00:00:00</div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="startTimer('${t.id}')" class="py-2 bg-emerald-600 rounded-xl text-xs font-bold">เริ่ม</button>
+                            <button onclick="resetTimer('${t.id}')" class="py-2 bg-rose-600 rounded-xl text-xs font-bold">รีเซ็ต</button>
+                            <button onclick="testAudio('${t.id}')" class="col-span-2 py-2 bg-indigo-600 rounded-xl text-xs font-bold">เทสเสียง</button>
+                        </div>
+                    </div>
+                `;
+            });
         }
 
         function startTimer(id) {
@@ -62,64 +134,16 @@
             t.startTime = Date.now();
         }
 
-        function stopTimer(id) {
+        function resetTimer(id) {
             const t = trackers.find(x => x.id === id);
             t.status = 'idle';
-            document.getElementById(`timer-${t.id}`).innerText = "00:00:00";
+            document.getElementById(`timer-${id}`).innerText = "00:00:00";
         }
 
         function testAudio(id) {
             const t = trackers.find(x => x.id === id);
-            if (t && t.audio) {
-                const a = new Audio(t.audio);
-                a.play().catch(e => alert("เบราว์เซอร์บล็อกการเล่นเสียงอัตโนมัติ"));
-            } else {
-                alert("ยังไม่มีเสียงที่บันทึกไว้ครับ");
-            }
-        }
-
-        const container = document.getElementById('tracker-container');
-        trackers.forEach(t => {
-            container.innerHTML += `
-                <div class="bg-slate-900 p-5 rounded-3xl border border-slate-800">
-                    <div class="flex justify-between items-center mb-3">
-                        <h2 class="font-bold text-lg">${t.name}</h2>
-                        <input type="number" value="${t.interval}" onchange="updateInterval('${t.id}', this.value)" 
-                            class="w-16 bg-slate-800 text-center rounded-lg py-1 border border-slate-700">
-                    </div>
-                    <div id="timer-${t.id}" class="text-3xl font-mono text-emerald-400 mb-4 text-center">00:00:00</div>
-                    <div class="grid grid-cols-2 gap-2">
-                        <button onclick="startTimer('${t.id}')" class="py-2 bg-emerald-600 rounded-xl text-xs font-bold">เริ่ม</button>
-                        <button onclick="stopTimer('${t.id}')" class="py-2 bg-rose-600 rounded-xl text-xs font-bold">หยุด</button>
-                        <button onclick="recordAudio('${t.id}')" id="btn-${t.id}" class="py-2 bg-slate-700 rounded-xl text-xs font-bold">อัดเสียง</button>
-                        <button onclick="testAudio('${t.id}')" class="py-2 bg-indigo-600 rounded-xl text-xs font-bold">เทส</button>
-                    </div>
-                </div>
-            `;
-        });
-
-        function updateInterval(id, val) {
-            const t = trackers.find(x => x.id === id);
-            t.interval = parseInt(val);
-        }
-
-        async function recordAudio(id) {
-            const btn = document.getElementById(`btn-${id}`);
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const recorder = new MediaRecorder(stream);
-            let chunks = [];
-            
-            recorder.ondataavailable = e => chunks.push(e.data);
-            recorder.onstop = () => {
-                const t = trackers.find(x => x.id === id);
-                t.audio = URL.createObjectURL(new Blob(chunks));
-                btn.innerText = 'อัดสำเร็จ';
-                setTimeout(() => btn.innerText = 'อัดเสียง', 2000);
-            };
-
-            recorder.start();
-            btn.innerText = 'กำลังอัด...';
-            setTimeout(() => recorder.stop(), 5000);
+            if(t.audio) new Audio(t.audio).play();
+            else alert("ยังไม่มีเสียง");
         }
 
         setInterval(updateClock, 1000);
